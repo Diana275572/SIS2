@@ -1,0 +1,124 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.*;
+import java.util.*;
+
+
+public class StudentScholarshipProcessor {
+    public static void main(String[] args) {
+        String inputFilePath = ".idea/students.xlsx";
+        String outputFilePath = "updated_students.xlsx";
+
+        try {
+
+            FileInputStream fis = new FileInputStream(inputFilePath);
+            Workbook workbook = new XSSFWorkbook(fis);
+            Sheet sheet = workbook.getSheetAt(0);
+
+
+            List<Map<String, Object>> studentData = new ArrayList<>();
+            Map<String, List<Double>> scholarshipIncreases = new HashMap<>();
+
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0) continue;
+
+                int id = (int) row.getCell(0).getNumericCellValue();
+                String name = row.getCell(1).getStringCellValue();
+                String group = row.getCell(2).getStringCellValue();
+                double scholarship = row.getCell(3).getNumericCellValue();
+                double gpa = row.getCell(4).getNumericCellValue();
+                String faculty = row.getCell(5).getStringCellValue();
+
+                double newScholarship = calculateNewScholarship(scholarship, gpa, faculty);
+
+                Map<String, Object> studentRow = new HashMap<>();
+                studentRow.put("ID", id);
+                studentRow.put("Name", name);
+                studentRow.put("Group", group);
+                studentRow.put("Scholarship", scholarship);
+                studentRow.put("Gpa", gpa);
+                studentRow.put("Faculty", faculty);
+                studentRow.put("NewScholarship", newScholarship);
+                studentData.add(studentRow);
+
+                scholarshipIncreases
+                        .computeIfAbsent(faculty, k -> new ArrayList<>())
+                        .add(newScholarship - scholarship);
+            }
+
+            workbook.close();
+
+            writeUpdatedData(outputFilePath, studentData, scholarshipIncreases);
+
+        } catch (IOException e) {
+            System.err.println("Ошибка при обработке файла: " + e.getMessage());
+        }
+    }
+
+    private static double calculateNewScholarship(double scholarship, double gpa, String faculty) {
+        double increase = 0;
+        switch (faculty) {
+            case "Engineering":
+                if (gpa > 2.4) increase = 0.10;
+                break;
+            case "Economics":
+                if (gpa > 2.4) increase = 0.15;
+                break;
+            case "Philosophy":
+                if (gpa > 2.2) increase = 0.05;
+                break;
+            case "Marketing":
+                if (gpa > 2.5) increase = 0.08;
+                break;
+        }
+        return scholarship + scholarship * increase;
+    }
+
+    private static void writeUpdatedData(String outputFilePath, List<Map<String, Object>> studentData,
+                                         Map<String, List<Double>> scholarshipIncreases) throws IOException {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet dataSheet = workbook.createSheet("Updated Students");
+
+        String[] headers = {"ID", "Name", "Group", "Scholarship", "Gpa", "Faculty", "NewScholarship"};
+        Row headerRow = dataSheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            headerRow.createCell(i).setCellValue(headers[i]);
+        }
+
+        int rowNum = 1;
+        for (Map<String, Object> student : studentData) {
+            Row row = dataSheet.createRow(rowNum++);
+            row.createCell(0).setCellValue((Integer) student.get("ID"));
+            row.createCell(1).setCellValue((String) student.get("Name"));
+            row.createCell(2).setCellValue((String) student.get("Group"));
+            row.createCell(3).setCellValue((Double) student.get("Scholarship"));
+            row.createCell(4).setCellValue((Double) student.get("Gpa"));
+            row.createCell(5).setCellValue((String) student.get("Faculty"));
+            row.createCell(6).setCellValue((Double) student.get("NewScholarship"));
+        }
+
+        Sheet avgSheet = workbook.createSheet("Average Increases");
+        Row avgHeader = avgSheet.createRow(0);
+        avgHeader.createCell(0).setCellValue("Faculty");
+        avgHeader.createCell(1).setCellValue("Average Increase");
+
+        int avgRowNum = 1;
+        for (Map.Entry<String, List<Double>> entry : scholarshipIncreases.entrySet()) {
+            String faculty = entry.getKey();
+            List<Double> increases = entry.getValue();
+            double averageIncrease = increases.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+
+            Row row = avgSheet.createRow(avgRowNum++);
+            row.createCell(0).setCellValue(faculty);
+            row.createCell(1).setCellValue(averageIncrease);
+        }
+
+        FileOutputStream fos = new FileOutputStream(outputFilePath);
+        workbook.write(fos);
+        fos.close();
+        workbook.close();
+
+        System.out.println("Данные успешно записаны в " + outputFilePath);
+    }
+}
